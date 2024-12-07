@@ -129,8 +129,10 @@ def get_movie_details(imdb_id):
                 movie_data = movie_details_response.json()
                 rating = movie_data.get("vote_average", 0)  # Get the rating (vote_average)
                 summary = movie_data.get("overview", "No summary available.")  # Get the summary
-                return rating, summary
-    return None, "No summary available."
+                release_date = movie_data.get("release_date", "")  # Get the release date
+                year = release_date[:4] if release_date else "Unknown"  # Extract year from release_date
+                return rating, summary, year
+    return None, "No summary available.", "Unknown"
 
 # Modified function to get chat response
 def get_chat_response(text):
@@ -142,19 +144,21 @@ def get_chat_response(text):
         else:
             movie_details = []
             for doc in results:
-                rating, summary = get_movie_details(doc.metadata['imdb_id'])  # Fetch rating and summary
+                rating, summary, year = get_movie_details(doc.metadata['imdb_id'])  # Fetch rating, summary, and year
                 movie_details.append({
                     "title": doc.metadata["title"],
                     "poster_url": f"https://image.tmdb.org/t/p/w500/{doc.metadata['poster_path']}",
                     "rating": rating,
                     "summary": summary,  # Include the summary
+                    "year": year,  # Include the year from TMDb
+                    "genre": doc.metadata.get("genres", "Unknown"),  # Add the genre
+                    "actors": ", ".join(doc.metadata.get("actors", "").split(",")[:3])  # Add up to 3 actors
                 })
             response = {"movies": movie_details}
     except Exception as e:
         response = {"error": str(e)}
 
     return jsonify(response)
-
 
 if __name__ == '__main__':
      # Get the port from the environment variable or default to 5000
