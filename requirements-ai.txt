@@ -1,0 +1,7 @@
+langchain
+langchain-openai
+langchain-chroma
+pandas
+python-dotenv
+langchain-community
+lark
