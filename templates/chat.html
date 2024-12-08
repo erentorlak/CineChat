@@ -68,41 +68,50 @@
 						var bot_html = '';
 
 						if (data.error) {
+							// If there's an error, show it
 							bot_html = `<div class="d-flex justify-content-start mb-4"><div class="msg_cotainer">${data.error}</div></div>`;
 						} else {
-							bot_html = data.movies.map(movie => {
-								return `<div class="d-flex justify-content-start mb-3"> 
-											<div class="img_cont_msg">
-												<img src="/static/logo.png" class="rounded-circle user_img_msg" style="width: 30px; height: 30px;">
-											</div>
-											<div class="msg_cotainer" style="padding: 10px; font-size: 14px; width: 100%;">
-												<div style="font-size: 16px; font-weight: bold; text-align: center;">${movie.title}</div>
-												<img src="${movie.poster_url}" style="width: 180px; height: auto; display: block; margin: 10px auto;">
-												<div style="font-size: 14px; color: #e94e1d; text-align: center; font-weight: 500;">Rating: ${movie.rating}/10</div>
-												<div style="font-size: 12px; color: #777; text-align: center; margin-top: 5px;">
-													<strong>Year:</strong> ${movie.year} | 
-													<strong>Genre:</strong> ${movie.genre}
-												</div>
-												<div style="font-size: 12px; color: #777; text-align: center; margin-top: 5px;">
-													<strong>Actors:</strong> ${movie.actors}
-												</div>
-												<div style="font-size: 12px; color: #555; text-align: justify; margin-top: 10px;">
-													${movie.summary}
-												</div>
+							// Show GPT response first
+							bot_html += `<div class="d-flex justify-content-start mb-4">
+											<div class="msg_cotainer">
+												<b>CineChat:</b> ${data.gpt_response}
 											</div>
 										</div>`;
-							}).join('');
+							
+							// Then display the movie details
+							data.movies.forEach(movie => {
+								bot_html += `<div class="d-flex justify-content-start mb-3">
+												<div class="img_cont_msg">
+													<img src="/static/logo.png" class="rounded-circle user_img_msg" style="width: 30px; height: 30px;">
+												</div>
+												<div class="msg_cotainer" style="padding: 10px; font-size: 14px; width: 100%;">
+													<div style="font-size: 16px; font-weight: bold; text-align: center;">${movie.title}</div>
+													<img src="${movie.poster_url}" style="width: 180px; height: auto; display: block; margin: 10px auto;">
+													<div style="font-size: 14px; color: #e94e1d; text-align: center; font-weight: 500;">Rating: ${movie.rating}/10</div>
+													<div style="font-size: 12px; color: #777; text-align: center; margin-top: 5px;">
+														<strong>Year:</strong> ${movie.year} | 
+														<strong>Genre:</strong> ${movie.genre}
+													</div>
+													<div style="font-size: 12px; color: #777; text-align: center; margin-top: 5px;">
+														<strong>Actors:</strong> ${movie.actors}
+													</div>
+													<div style="font-size: 12px; color: #555; text-align: justify; margin-top: 10px;">
+														${movie.summary}
+													</div>
+												</div>
+											</div>`;
+							});
 						}
 
+						// Append the constructed HTML to the chat window
 						$("#messageFormeight").append($.parseHTML(bot_html));
 						$("#messageFormeight").children().last().hide().fadeIn(500);
-						$("#messageFormeight").animate({ scrollTop: $("#messageFormeight")[0].scrollHeight }, 500);
+						$("#messageFormeight").animate({ scrollTop: $("#messageFormeight")[0].scrollHeight }, 1000);
 					});
-
-
-					event.preventDefault();
+					event.preventDefault();  // Prevent form submission
 				});
 			});
 		</script>
+
     </body>
 </html>
