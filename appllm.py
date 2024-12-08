@@ -26,13 +26,23 @@ def initialize_retriever():
     global retriever
 
     # Load and preprocess the CSV file
-    df = pd.read_csv("CineChatCSV_cleaned.csv")
+    df = pd.read_csv("CineChatCSV_cleaned_new.csv")
 
     def combine_fields(row):
-        content = f"""Title: {row['title']}
-
-Plot: {row['plot']}""".strip()
+        # Safely retrieve and convert the summary to a string
+        summary = str(row.get('summary', ''))
+        
+        # Calculate the midpoint
+        midpoint = len(summary) * 3 // 4
+        
+        # Slice the summary to include only the first half
+        half_summary = summary[:midpoint]
+        
+        # Format the content string
+        content = f"Title: {row.get('title', '')}\nSummary: {half_summary}"
+        
         return content
+
 
     df["content"] = df.apply(combine_fields, axis=1)
 
@@ -47,7 +57,9 @@ Plot: {row['plot']}""".strip()
             "id": row["id"],
             "imdb_id": row["imdb_id"],
             "poster_path": row["poster_path"],
-            "summary": row["summary"]
+            "year": row["year"],
+            "rating": row["rating"],
+            #"summary": row["summary"]
         }
         doc = Document(page_content=row["content"], metadata=metadata)
         documents.append(doc)
@@ -66,13 +78,14 @@ Plot: {row['plot']}""".strip()
         AttributeInfo(name="actors", description="The actors in the movie", type="string"),
         AttributeInfo(name="genres", description="The genres of the movie", type="string"),
         AttributeInfo(name="year", description="The release year of the movie", type="integer"),
-        AttributeInfo(name="id", description="The internal ID of the movie", type="integer"),
-        AttributeInfo(name="summary", description="The detailed summary of the movie", type="string"),
+        AttributeInfo(name="rating", description="The rating of the movie", type="float"),
+        #AttributeInfo(name="id", description="The internal ID of the movie", type="integer"),
+        #AttributeInfo(name="summary", description="The detailed summary of the movie", type="string"),
     ]
 
     document_content_description = (
         "Detailed information about movies, including title, director, actors, genres, plot, and summary. "
-        "If user wants recommendations, it can also provide recommendations based on genres, actors, or directors."
+        #"If user wants recommendations, it can also provide recommendations based on genres, actors, or directors."#
     )
 
     llm = ChatOpenAI(temperature=0)
@@ -111,7 +124,7 @@ def index():
 @app.route("/get", methods=["GET", "POST"])
 def chat():
     msg = request.form["msg"]
-    response = get_chat_response(msg)
+    response = get_chat_response(msg.title())
     return response
 
 # Function to get movie details (including rating and summary) from TMDb by IMDb ID
@@ -136,6 +149,7 @@ def get_movie_details(imdb_id):
 
 # Modified function to get chat response
 def get_chat_response(text):
+    print("query: " + text)
     global retriever
     try:
         results = retriever.invoke(text)
