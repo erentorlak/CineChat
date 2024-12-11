@@ -75,7 +75,7 @@ def initialize_retriever():
         "Detailed information about movies, including title, director, actors, genres, plot, and summary."
     )
 
-    llm = ChatOpenAI(temperature=0)
+    llm = ChatOpenAI(model="gpt-4o", temperature=0)
     retriever = SelfQueryRetriever.from_llm(
         llm,
         vectorstore,
