@@ -67,13 +67,13 @@ def initialize_retriever():
         documents.append(doc)
 
     embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-    #embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
-    #vectorstore = Chroma.from_documents(
-    #    documents=documents,
-    #    embedding=embeddings,
-    #    persist_directory="movie_vectorstore3openai",
-    #    ids=[doc.metadata["id"] for doc in documents],
-    #)
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+    vectorstore = Chroma.from_documents(
+        documents=documents,
+        embedding=embeddings,
+        persist_directory="movie_vectorstore3openai",
+        ids=[doc.metadata["id"] for doc in documents],
+    )
 
     def load_vectorstore(persist_directory="movie_vectorstore3openai"):
         return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
