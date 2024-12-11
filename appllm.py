@@ -9,7 +9,7 @@ from langchain_community.query_constructors.chroma import ChromaTranslator
 from langchain.retrievers.self_query.base import SelfQueryRetriever
 from langchain.chains.query_constructor.schema import AttributeInfo
 
-from langchain_huggingface import HuggingFaceEmbeddings
+#from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 
 import os
@@ -67,13 +67,13 @@ def initialize_retriever():
         documents.append(doc)
 
     embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
-    vectorstore = Chroma.from_documents(
-        documents=documents,
-        embedding=embeddings,
-        persist_directory="movie_vectorstore3openai",
-        ids=[doc.metadata["id"] for doc in documents],
-    )
+    #embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+    #vectorstore = Chroma.from_documents(
+    #    documents=documents,
+    #    embedding=embeddings,
+    #    persist_directory="movie_vectorstore4openai",
+    #    ids=[doc.metadata["id"] for doc in documents],
+    #)
 
     def load_vectorstore(persist_directory="movie_vectorstore3openai"):
         return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
