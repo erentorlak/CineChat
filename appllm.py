@@ -4,11 +4,23 @@ from langchain.docstore.document import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
+from langchain_community.query_constructors.chroma import ChromaTranslator
 from langchain.retrievers.self_query.base import SelfQueryRetriever
 from langchain.chains.query_constructor.schema import AttributeInfo
+
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.prompts import ChatPromptTemplate
+
 import os
 import requests
 from dotenv import load_dotenv
+
+#%%
+# pip install sentence-transformers
+# pip install langchain-huggingface
+#%%
+
 
 # Load environment variables
 load_dotenv()
@@ -31,7 +43,7 @@ def initialize_retriever():
 
     def combine_fields(row):
         summary = str(row.get('summary', ''))
-        midpoint = len(summary) * 3 // 4
+        midpoint = len(summary) * 1 // 4
         half_summary = summary[:midpoint]
         content = f"Title: {row.get('title', '')}\nSummary: {half_summary}"
         return content
@@ -55,12 +67,19 @@ def initialize_retriever():
         doc = Document(page_content=row["content"], metadata=metadata)
         documents.append(doc)
 
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-    vectorstore = Chroma.from_documents(
-        documents=documents,
-        embedding=embeddings,
-        ids=[doc.metadata["id"] for doc in documents],
-    )
+    #embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+ #   vectorstore = Chroma.from_documents(
+ #       documents=documents,
+ #       embedding=embeddings,
+ #       persist_directory="movie_vectorstore2hf",
+ #       ids=[doc.metadata["id"] for doc in documents],
+ #   )
+
+    def load_vectorstore(persist_directory="movie_vectorstore2hf"):
+        return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
+
+    vectorstore = load_vectorstore()
 
     metadata_field_info = [
         AttributeInfo(name="title", description="The title of the movie", type="string"),
@@ -71,17 +90,19 @@ def initialize_retriever():
         AttributeInfo(name="rating", description="The rating of the movie", type="float"),
     ]
 
-    document_content_description = (
-        "Detailed information about movies, including title, director, actors, genres, plot, and summary."
-    )
+    document_content_description = "Brief summary of a movie"
 
-    llm = ChatOpenAI(model="gpt-4o", temperature=0)
+
+  #  llm = ChatOpenAI(temperature=0)
+    llm = ChatGroq(model="mixtral-8x7b-32768")
     retriever = SelfQueryRetriever.from_llm(
         llm,
         vectorstore,
         document_content_description,
         metadata_field_info,
-        enable_filters=True,
+        structured_query_translator = ChromaTranslator(),
+        #use_original_query=True,
+        verbose=True,
     )
 
 # Function to call GPT API to generate response
@@ -108,6 +129,29 @@ def call_gpt_api(query, movie_titles):
         return response.json()["choices"][0]["message"]["content"]
     else:
         raise Exception(f"GPT API Error: {response.status_code}, {response.text}")
+    
+
+
+
+
+def call_groq_llm(query, movie_titles):
+    system = """You are a movie recommendation assistant. You have been asked to evaluate a movie recommendation according to question and retrieved movie titles."""
+    grade_prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", system),
+        ("human", "Retrieved Movie Titles: \n\n {movie_titles} \n\n User question: {question}"),
+    ]
+)
+    llm = ChatGroq(model="mixtral-8x7b-32768")
+    last_llm = grade_prompt | llm
+    
+    response = last_llm.invoke({"movie_titles": movie_titles, "question": query})
+
+    return response.content
+
+
+
+
 
 # Initialize retriever during app startup
 initialize_retriever()
@@ -140,6 +184,10 @@ def get_movie_details(imdb_id):
                 release_date = movie_data.get("release_date", "")
                 year = release_date[:4] if release_date else "Unknown"
                 return rating, summary, year
+            
+    else:
+        print(f"Error: {response.status_code}, {response.text}")
+
     return None, "No summary available.", "Unknown"
 
 # Modified function to get chat response
@@ -147,7 +195,8 @@ def get_chat_response(text):
     print("query: " + text)
     global retriever
     try:
-        results = retriever.invoke(text)
+        results = retriever.invoke(text)        # Invoke the retriever with the user query
+        print("results: " + str(results))
         if not results:
             response = {"message": "No results found for your query."}
         else:
@@ -165,7 +214,7 @@ def get_chat_response(text):
                     "genre": doc.metadata.get("genres", "Unknown"),
                     "actors": ", ".join(doc.metadata.get("actors", "").split(",")[:3])
                 })
-            gpt_response = call_gpt_api(text, movie_titles)
+            gpt_response = call_groq_llm(text, movie_titles)
             response = {"gpt_response": gpt_response, "movies": movie_details}
     except Exception as e:
         response = {"error": str(e)}
@@ -175,3 +224,5 @@ def get_chat_response(text):
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
+# %%
