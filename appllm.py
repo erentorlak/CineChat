@@ -1,7 +1,14 @@
 from flask import Flask, render_template, request, jsonify
+import pandas as pd
+from langchain.docstore.document import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
+from langchain_openai import ChatOpenAI
 from langchain_groq import ChatGroq
+from langchain_community.query_constructors.chroma import ChromaTranslator
+from langchain.retrievers.self_query.base import SelfQueryRetriever
+from langchain.chains.query_constructor.schema import AttributeInfo
+
 from langchain_core.prompts import ChatPromptTemplate
 
 import os
@@ -14,73 +21,119 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 
-# Global variables for LLM
+# Global variables for LLM and retriever
+retriever = None
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")  # Make sure to load your API key from environment variables
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # Load OpenAI API key from environment variables
 
-embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-#embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
-#vectorstore = Chroma.from_documents(
-#    documents=documents,
-#    embedding=embeddings,
-#    persist_directory="movie_vectorstore5openai",
-#    ids=[doc.metadata["id"] for doc in documents],
-#    #use_jsonb=True
-#)
+# Function to initialize the LLM and retriever
+def initialize_retriever():
+    global retriever
 
-def load_vectorstore(persist_directory="movie_vectorstore5openai"):
-    return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
+    # Load and preprocess the CSV file
+    df = pd.read_csv("CineChatCSV_cleaned_new.csv")
 
-vectorstore = load_vectorstore()
+    def combine_fields(row):
+        summary = str(row.get('summary', ''))
+        midpoint = len(summary) * 3 // 4
+        half_summary = summary[:midpoint]
+        content = f"Title: {row.get('title', '')}\nSummary: {half_summary}"
+        return content
 
-def recommend_movies(query, top_k=3):
-    results = vectorstore.similarity_search_by_vector(embedding=embeddings.embed_query(query), k=top_k)
-    recommendations = []
-    for result in results:
-        metadata = result.metadata
-        recommendations.append({
-            "title": metadata["title"],
-            "director": metadata["director"],
-            "actors": metadata["actors"],
-            "genres": metadata["genres"],
-            "plot": metadata["plot"],
-            "poster_path": metadata["poster_path"],
-            "imdb_id": metadata["imdb_id"],
-        })
-    return recommendations
+    df["content"] = df.apply(combine_fields, axis=1)
 
-# Function to call GPT API to generate response
-#def call_gpt_api(query, movie_titles):
-#    prompt = (
-#        f"Based on the query '{query}', the recommended movies are {', '.join(movie_titles)}. "
-#        "Can you suggest two more movies that are similar to this query?"
-#    )
-#
-#    url = "https://api.openai.com/v1/chat/completions"
-#    headers = {
-#        "Content-Type": "application/json",
-#        "Authorization": f"Bearer {OPENAI_API_KEY}"
-#    }
-#    payload = {
-#        "model": "gpt-4",
-#        "messages": [{"role": "system", "content": "You are a movie recommendation assistant."},
-#                     {"role": "user", "content": prompt}],
-#        "temperature": 0.7
-#    }
-#
-#    response = requests.post(url, headers=headers, json=payload)
-#    if response.status_code == 200:
-#        return response.json()["choices"][0]["message"]["content"]
-#    else:
-#        raise Exception(f"GPT API Error: {response.status_code}, {response.text}")
-#    
+    documents = []
+    for _, row in df.iterrows():
+        metadata = {
+            "title": row["title"],
+            "director": row["director"],
+            "actors": row["actors"],
+            "genres": row["genres"],
+            "plot": row["plot"],
+            "id": row["id"],
+            "imdb_id": row["imdb_id"],
+            "poster_path": row["poster_path"],
+            "year": row["year"],
+            "rating": row["rating"],
+        }
+        doc = Document(page_content=row["content"], metadata=metadata)
+        documents.append(doc)
+
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+    #embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+    #vectorstore = Chroma.from_documents(
+    #    documents=documents,
+    #    embedding=embeddings,
+    #    persist_directory="movie_vectorstore5openai",
+    #    ids=[doc.metadata["id"] for doc in documents],
+    #    #use_jsonb=True
+    #)
+
+    def load_vectorstore(persist_directory="movie_vectorstore5openai"):
+        return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
+
+    vectorstore = load_vectorstore()
+
+    metadata_field_info = [
+        AttributeInfo(
+            name="title",
+            description='The title of the movie (quoted, e.g., "Inception").',
+            type="string"
+        ),
+        AttributeInfo(
+            name="director",
+            description='The director of the movie (quoted, e.g., "Christopher Nolan").',
+            type="string"
+        ),
+        AttributeInfo(
+            name="actors",
+            description='The actors in the movie (quoted, e.g., "Leonardo DiCaprio, Joseph Gordon-Levitt").',
+            type="string"
+        ),
+        AttributeInfo(
+            name="genres",
+            description=(
+                'The genres of the movie (quoted, e.g., "Action, Sci-Fi, Thriller, Romance, Comedy, Drama, '
+                'Horror, Fantasy, Mystery, Adventure, Animation, Biography, Crime, Family, Historical, '
+                'Musical, Sports, War, Western").'
+            ),
+            type="string"
+        ),
+        AttributeInfo(
+            name="year",
+            description='The year the movie was released (quoted, e.g., "2010").',
+            type="string"
+        ),
+        AttributeInfo(
+            name="rating",
+            description='The rating of the movie (quoted, e.g., "8.8").',
+            type="string"
+        ),
+    ]
+
+
+    document_content_description = "Brief summary of a movie"
+
+    llm = ChatOpenAI(temperature=0, model="gpt-4o")
+    #llm = ChatGroq(model="mixtral-8x7b-32768")
+    retriever = SelfQueryRetriever.from_llm(
+        llm=llm,
+        vectorstore=vectorstore,
+        document_contents=document_content_description,
+        metadata_field_info=metadata_field_info,
+        structured_query_translator=ChromaTranslator(),
+        use_original_query=True,
+        verbose=True,
+    )
 
 
 def call_groq_llm(query, movie_titles):
     system = """You are a movie recommendation assistant. 
     You have been asked to evaluate a movie recommendation according to question and retrieved movie titles.
     If not enough movie titles are retrieved, you can recommend movies based on the user question.
+    Give a response so that this response will directly be shown to the user in the chatbot. Also the query comes from the user in the chatbot.
+    Do not things like sure, absolutely etc. indicating that this server uses you as gpt because this response will be directly shown to the user.
     """
     grade_prompt = ChatPromptTemplate.from_messages(
     [
@@ -96,6 +149,11 @@ def call_groq_llm(query, movie_titles):
     return response.content
 
 
+
+
+
+# Initialize retriever during app startup
+initialize_retriever()
 
 @app.route("/")
 def index():
@@ -138,20 +196,20 @@ def get_chat_response(text):
     movie_details = []
     movie_titles = []
     try:
-        results = recommend_movies(text)
+        results = retriever.invoke(text)        # Invoke the retriever with the user query
         #print("results: " + str(results))
               
         for doc in results:
-            rating, summary, year = get_movie_details(doc['imdb_id'])
-            movie_titles.append(doc["title"])
+            rating, summary, year = get_movie_details(doc.metadata['imdb_id'])
+            movie_titles.append(doc.metadata["title"])
             movie_details.append({
-                "title": doc["title"],
-                "poster_url": f"https://image.tmdb.org/t/p/w500/{doc['poster_path']}",
+                "title": doc.metadata["title"],
+                "poster_url": f"https://image.tmdb.org/t/p/w500/{doc.metadata['poster_path']}",
                 "rating": rating,
                 "summary": summary,
                 "year": year,
-                "genre": doc.get("genres", "Unknown"),
-                "actors": ", ".join(doc.get("actors", "").split(",")[:3])
+                "genre": doc.metadata.get("genres", "Unknown"),
+                "actors": ", ".join(doc.metadata.get("actors", "").split(",")[:3])
             })
         gpt_response = call_groq_llm(text, movie_titles)
         response = {"gpt_response": gpt_response, "movies": movie_details}
