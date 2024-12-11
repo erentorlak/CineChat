@@ -1,26 +1,12 @@
 from flask import Flask, render_template, request, jsonify
-import pandas as pd
-from langchain.docstore.document import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
-from langchain_openai import ChatOpenAI
 from langchain_groq import ChatGroq
-from langchain_community.query_constructors.chroma import ChromaTranslator
-from langchain.retrievers.self_query.base import SelfQueryRetriever
-from langchain.chains.query_constructor.schema import AttributeInfo
-#from langchain.vectorstores.pgvector import PGVector
-
-#from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 
 import os
 import requests
 from dotenv import load_dotenv
-
-#%%
-# pip install sentence-transformers
-# pip install langchain-huggingface
-#%%
 
 # Load environment variables
 load_dotenv()
@@ -28,83 +14,41 @@ load_dotenv()
 # Initialize Flask app
 app = Flask(__name__)
 
-# Global variables for LLM and retriever
-retriever = None
+# Global variables for LLM
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")  # Make sure to load your API key from environment variables
 TMDB_BASE_URL = "https://api.themoviedb.org/3"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # Load OpenAI API key from environment variables
 
-# Function to initialize the LLM and retriever
-def initialize_retriever():
-    global retriever
+embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+#embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+#vectorstore = Chroma.from_documents(
+#    documents=documents,
+#    embedding=embeddings,
+#    persist_directory="movie_vectorstore5openai",
+#    ids=[doc.metadata["id"] for doc in documents],
+#    #use_jsonb=True
+#)
 
-    # Load and preprocess the CSV file
-    df = pd.read_csv("CineChatCSV_cleaned_new.csv")
+def load_vectorstore(persist_directory="movie_vectorstore5openai"):
+    return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
 
-    def combine_fields(row):
-        summary = str(row.get('summary', ''))
-        midpoint = len(summary) * 3 // 4
-        half_summary = summary[:midpoint]
-        content = f"Title: {row.get('title', '')}\nSummary: {half_summary}"
-        return content
+vectorstore = load_vectorstore()
 
-    df["content"] = df.apply(combine_fields, axis=1)
-
-    documents = []
-    for _, row in df.iterrows():
-        metadata = {
-            "title": row["title"],
-            "director": row["director"],
-            "actors": row["actors"],
-            "genres": row["genres"],
-            "plot": row["plot"],
-            "id": row["id"],
-            "imdb_id": row["imdb_id"],
-            "poster_path": row["poster_path"],
-            "year": row["year"],
-            "rating": row["rating"],
-        }
-        doc = Document(page_content=row["content"], metadata=metadata)
-        documents.append(doc)
-
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-    #embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
-    #vectorstore = Chroma.from_documents(
-    #    documents=documents,
-    #    embedding=embeddings,
-    #    persist_directory="movie_vectorstore5openai",
-    #    ids=[doc.metadata["id"] for doc in documents],
-    #    #use_jsonb=True
-    #)
-
-    def load_vectorstore(persist_directory="movie_vectorstore5openai"):
-        return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
-
-    vectorstore = load_vectorstore()
-
-    metadata_field_info = [
-        AttributeInfo(name="title", description="The title of the movie", type="string"),
-        AttributeInfo(name="director", description="The director of the movie", type="string"),
-        AttributeInfo(name="actors", description="The actors in the movie", type="string"),
-        AttributeInfo(name="genres", description="The genres of the movie", type="string"),
-        AttributeInfo(name="year", description="The year the movie was released. You must put year in quotes like \"year\"", type="integer"),
-        AttributeInfo(name="rating", description="The rating of the movie", type="float"),
-    ]
-
-    document_content_description = "Brief summary of a movie"
-
-
-    llm = ChatOpenAI(temperature=0, model="gpt-4")
-    #llm = ChatGroq(model="mixtral-8x7b-32768")
-    retriever = SelfQueryRetriever.from_llm(
-        llm,
-        vectorstore,
-        document_content_description,
-        metadata_field_info,
-        structured_query_translator = ChromaTranslator(),
-        #use_original_query=True,
-        verbose=True,
-    )
+def recommend_movies(query, top_k=3):
+    results = vectorstore.similarity_search_by_vector(embedding=embeddings.embed_query(query), k=top_k)
+    recommendations = []
+    for result in results:
+        metadata = result.metadata
+        recommendations.append({
+            "title": metadata["title"],
+            "director": metadata["director"],
+            "actors": metadata["actors"],
+            "genres": metadata["genres"],
+            "plot": metadata["plot"],
+            "poster_path": metadata["poster_path"],
+            "imdb_id": metadata["imdb_id"],
+        })
+    return recommendations
 
 # Function to call GPT API to generate response
 #def call_gpt_api(query, movie_titles):
@@ -133,8 +77,6 @@ def initialize_retriever():
 #    
 
 
-
-
 def call_groq_llm(query, movie_titles):
     system = """You are a movie recommendation assistant. 
     You have been asked to evaluate a movie recommendation according to question and retrieved movie titles.
@@ -154,11 +96,6 @@ def call_groq_llm(query, movie_titles):
     return response.content
 
 
-
-
-
-# Initialize retriever during app startup
-initialize_retriever()
 
 @app.route("/")
 def index():
@@ -201,20 +138,20 @@ def get_chat_response(text):
     movie_details = []
     movie_titles = []
     try:
-        results = retriever.invoke(text)        # Invoke the retriever with the user query
+        results = recommend_movies(text)
         #print("results: " + str(results))
               
         for doc in results:
-            rating, summary, year = get_movie_details(doc.metadata['imdb_id'])
-            movie_titles.append(doc.metadata["title"])
+            rating, summary, year = get_movie_details(doc['imdb_id'])
+            movie_titles.append(doc["title"])
             movie_details.append({
-                "title": doc.metadata["title"],
-                "poster_url": f"https://image.tmdb.org/t/p/w500/{doc.metadata['poster_path']}",
+                "title": doc["title"],
+                "poster_url": f"https://image.tmdb.org/t/p/w500/{doc['poster_path']}",
                 "rating": rating,
                 "summary": summary,
                 "year": year,
-                "genre": doc.metadata.get("genres", "Unknown"),
-                "actors": ", ".join(doc.metadata.get("actors", "").split(",")[:3])
+                "genre": doc.get("genres", "Unknown"),
+                "actors": ", ".join(doc.get("actors", "").split(",")[:3])
             })
         gpt_response = call_groq_llm(text, movie_titles)
         response = {"gpt_response": gpt_response, "movies": movie_details}
