@@ -21,7 +21,6 @@ from dotenv import load_dotenv
 # pip install langchain-huggingface
 #%%
 
-
 # Load environment variables
 load_dotenv()
 
@@ -43,7 +42,7 @@ def initialize_retriever():
 
     def combine_fields(row):
         summary = str(row.get('summary', ''))
-        midpoint = len(summary) * 1 // 4
+        midpoint = len(summary) * 3 // 4
         half_summary = summary[:midpoint]
         content = f"Title: {row.get('title', '')}\nSummary: {half_summary}"
         return content
@@ -67,16 +66,16 @@ def initialize_retriever():
         doc = Document(page_content=row["content"], metadata=metadata)
         documents.append(doc)
 
-    #embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
- #   vectorstore = Chroma.from_documents(
- #       documents=documents,
- #       embedding=embeddings,
- #       persist_directory="movie_vectorstore2hf",
- #       ids=[doc.metadata["id"] for doc in documents],
- #   )
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+    #embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+    #vectorstore = Chroma.from_documents(
+    #    documents=documents,
+    #    embedding=embeddings,
+    #    persist_directory="movie_vectorstore3openai",
+    #    ids=[doc.metadata["id"] for doc in documents],
+    #)
 
-    def load_vectorstore(persist_directory="movie_vectorstore2hf"):
+    def load_vectorstore(persist_directory="movie_vectorstore3openai"):
         return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
 
     vectorstore = load_vectorstore()
@@ -106,36 +105,39 @@ def initialize_retriever():
     )
 
 # Function to call GPT API to generate response
-def call_gpt_api(query, movie_titles):
-    prompt = (
-        f"Based on the query '{query}', the recommended movies are {', '.join(movie_titles)}. "
-        "Can you suggest two more movies that are similar to this query?"
-    )
-
-    url = "https://api.openai.com/v1/chat/completions"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {OPENAI_API_KEY}"
-    }
-    payload = {
-        "model": "gpt-4",
-        "messages": [{"role": "system", "content": "You are a movie recommendation assistant."},
-                     {"role": "user", "content": prompt}],
-        "temperature": 0.7
-    }
-
-    response = requests.post(url, headers=headers, json=payload)
-    if response.status_code == 200:
-        return response.json()["choices"][0]["message"]["content"]
-    else:
-        raise Exception(f"GPT API Error: {response.status_code}, {response.text}")
-    
+#def call_gpt_api(query, movie_titles):
+#    prompt = (
+#        f"Based on the query '{query}', the recommended movies are {', '.join(movie_titles)}. "
+#        "Can you suggest two more movies that are similar to this query?"
+#    )
+#
+#    url = "https://api.openai.com/v1/chat/completions"
+#    headers = {
+#        "Content-Type": "application/json",
+#        "Authorization": f"Bearer {OPENAI_API_KEY}"
+#    }
+#    payload = {
+#        "model": "gpt-4",
+#        "messages": [{"role": "system", "content": "You are a movie recommendation assistant."},
+#                     {"role": "user", "content": prompt}],
+#        "temperature": 0.7
+#    }
+#
+#    response = requests.post(url, headers=headers, json=payload)
+#    if response.status_code == 200:
+#        return response.json()["choices"][0]["message"]["content"]
+#    else:
+#        raise Exception(f"GPT API Error: {response.status_code}, {response.text}")
+#    
 
 
 
 
 def call_groq_llm(query, movie_titles):
-    system = """You are a movie recommendation assistant. You have been asked to evaluate a movie recommendation according to question and retrieved movie titles."""
+    system = """You are a movie recommendation assistant. 
+    You have been asked to evaluate a movie recommendation according to question and retrieved movie titles.
+    If not enough movie titles are retrieved, you can recommend movies based on the user question.
+    """
     grade_prompt = ChatPromptTemplate.from_messages(
     [
         ("system", system),
@@ -196,24 +198,22 @@ def get_chat_response(text):
     global retriever
     try:
         results = retriever.invoke(text)        # Invoke the retriever with the user query
-        print("results: " + str(results))
-        if not results:
-            response = {"message": "No results found for your query."}
-        else:
-            movie_details = []
-            movie_titles = []
-            for doc in results:
-                rating, summary, year = get_movie_details(doc.metadata['imdb_id'])
-                movie_titles.append(doc.metadata["title"])
-                movie_details.append({
-                    "title": doc.metadata["title"],
-                    "poster_url": f"https://image.tmdb.org/t/p/w500/{doc.metadata['poster_path']}",
-                    "rating": rating,
-                    "summary": summary,
-                    "year": year,
-                    "genre": doc.metadata.get("genres", "Unknown"),
-                    "actors": ", ".join(doc.metadata.get("actors", "").split(",")[:3])
-                })
+        #print("results: " + str(results))
+              
+        movie_details = []
+        movie_titles = []
+        for doc in results:
+            rating, summary, year = get_movie_details(doc.metadata['imdb_id'])
+            movie_titles.append(doc.metadata["title"])
+            movie_details.append({
+                "title": doc.metadata["title"],
+                "poster_url": f"https://image.tmdb.org/t/p/w500/{doc.metadata['poster_path']}",
+                "rating": rating,
+                "summary": summary,
+                "year": year,
+                "genre": doc.metadata.get("genres", "Unknown"),
+                "actors": ", ".join(doc.metadata.get("actors", "").split(",")[:3])
+            })
             gpt_response = call_groq_llm(text, movie_titles)
             response = {"gpt_response": gpt_response, "movies": movie_details}
     except Exception as e:
