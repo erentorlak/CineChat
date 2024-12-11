@@ -8,6 +8,7 @@ from langchain_groq import ChatGroq
 from langchain_community.query_constructors.chroma import ChromaTranslator
 from langchain.retrievers.self_query.base import SelfQueryRetriever
 from langchain.chains.query_constructor.schema import AttributeInfo
+#from langchain.vectorstores.pgvector import PGVector
 
 #from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
@@ -71,11 +72,12 @@ def initialize_retriever():
     #vectorstore = Chroma.from_documents(
     #    documents=documents,
     #    embedding=embeddings,
-    #    persist_directory="movie_vectorstore4openai",
+    #    persist_directory="movie_vectorstore5openai",
     #    ids=[doc.metadata["id"] for doc in documents],
+    #    #use_jsonb=True
     #)
 
-    def load_vectorstore(persist_directory="movie_vectorstore3openai"):
+    def load_vectorstore(persist_directory="movie_vectorstore5openai"):
         return Chroma(persist_directory=persist_directory, embedding_function=embeddings)
 
     vectorstore = load_vectorstore()
@@ -85,15 +87,15 @@ def initialize_retriever():
         AttributeInfo(name="director", description="The director of the movie", type="string"),
         AttributeInfo(name="actors", description="The actors in the movie", type="string"),
         AttributeInfo(name="genres", description="The genres of the movie", type="string"),
-        AttributeInfo(name="year", description="The release year of the movie", type="integer"),
+        AttributeInfo(name="year", description="The year the movie was released. You must put year in quotes like \"year\"", type="integer"),
         AttributeInfo(name="rating", description="The rating of the movie", type="float"),
     ]
 
     document_content_description = "Brief summary of a movie"
 
 
-  #  llm = ChatOpenAI(temperature=0)
-    llm = ChatGroq(model="mixtral-8x7b-32768")
+    llm = ChatOpenAI(temperature=0, model="gpt-4")
+    #llm = ChatGroq(model="mixtral-8x7b-32768")
     retriever = SelfQueryRetriever.from_llm(
         llm,
         vectorstore,
@@ -196,12 +198,12 @@ def get_movie_details(imdb_id):
 def get_chat_response(text):
     print("query: " + text)
     global retriever
+    movie_details = []
+    movie_titles = []
     try:
         results = retriever.invoke(text)        # Invoke the retriever with the user query
         #print("results: " + str(results))
               
-        movie_details = []
-        movie_titles = []
         for doc in results:
             rating, summary, year = get_movie_details(doc.metadata['imdb_id'])
             movie_titles.append(doc.metadata["title"])
@@ -214,10 +216,12 @@ def get_chat_response(text):
                 "genre": doc.metadata.get("genres", "Unknown"),
                 "actors": ", ".join(doc.metadata.get("actors", "").split(",")[:3])
             })
-            gpt_response = call_groq_llm(text, movie_titles)
-            response = {"gpt_response": gpt_response, "movies": movie_details}
+        gpt_response = call_groq_llm(text, movie_titles)
+        response = {"gpt_response": gpt_response, "movies": movie_details}
     except Exception as e:
-        response = {"error": str(e)}
+        print("exception: " + str(e))
+        gpt_response = call_groq_llm(text, movie_titles)
+        response = {"gpt_response": gpt_response, "movies": movie_details}
 
     return jsonify(response)
 
