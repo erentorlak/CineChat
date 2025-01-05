@@ -3,6 +3,11 @@
 This project is a Flask-based web application that provides movie recommendations based on user queries. It uses advanced language models and vector-based search to retrieve and rank movie suggestions. The system integrates multiple AI-powered APIs and models to ensure an engaging and accurate chatbot experience.
 
 ---
+## Interface
+
+![Chatbot Interface](static/chat_interface.png)
+
+
 
 ## Features
 
@@ -53,7 +58,7 @@ This project is a Flask-based web application that provides movie recommendation
 
 1. **Start the Application**:
    ```bash
-   python appllm.py
+   python app.py
    ```
 
 2. **Access the Application**:
@@ -75,7 +80,7 @@ This project is a Flask-based web application that provides movie recommendation
 ```
 movie-recommendation-chatbot/
 |
-├── appllm.py                  # Main Flask application
+├── app.py                  # Main Flask application
 ├── requirements.txt        # Python dependencies
 ├── templates/
 │   └── chat.html           # HTML template for the chatbot UI
@@ -93,5 +98,6 @@ movie-recommendation-chatbot/
 - **Missing API Keys**: Verify the `.env` file contains valid API keys.
 - **Dependency Issues**: Run `pip install --upgrade -r requirements.txt` to update dependencies.
 ---
+```
 
 
