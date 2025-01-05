@@ -15,7 +15,7 @@ This project is a Flask-based web application that provides movie recommendation
 
 ## Prerequisites
 
-1. **Python 3.8 or later**: Ensure you have Python installed.
+1. **Python 12.8 or later**: Ensure you have Python installed.
 2. **API Keys**: Set up API keys for OpenAI and Groq.
 3. **Environment**: `pip` and `virtualenv` or any Python environment manager.
 
