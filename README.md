@@ -46,19 +46,14 @@ This project is a Flask-based web application that provides movie recommendation
      ```env
      OPENAI_API_KEY=your_openai_api_key
      GROQ_API_KEY=your_groq_api_key
-     PORT=5000  # Optional, default is 5000
      ```
-
-5. **Prepare the Dataset**:
-   - Place the `CineChatCSV_cleaned_new.csv` file in the root directory.
-
 ---
 
 ## Running the Application
 
 1. **Start the Application**:
    ```bash
-   python app.py
+   python appllm.py
    ```
 
 2. **Access the Application**:
@@ -80,7 +75,7 @@ This project is a Flask-based web application that provides movie recommendation
 ```
 movie-recommendation-chatbot/
 |
-├── app.py                  # Main Flask application
+├── appllm.py                  # Main Flask application
 ├── requirements.txt        # Python dependencies
 ├── templates/
 │   └── chat.html           # HTML template for the chatbot UI
@@ -93,21 +88,10 @@ movie-recommendation-chatbot/
 
 ---
 
-## Notes
-
-- Ensure the `movie_vectorstore5openai` directory exists or will be created during runtime for vector storage.
-- Use the latest versions of dependencies to avoid compatibility issues.
-
----
-
 ## Troubleshooting
 
 - **Missing API Keys**: Verify the `.env` file contains valid API keys.
 - **Dependency Issues**: Run `pip install --upgrade -r requirements.txt` to update dependencies.
-- **Port Conflicts**: Modify the `PORT` variable in the `.env` file to use a different port.
-
 ---
 
-## Demo Video
 
-[Watch the project demo on YouTube](https://www.youtube.com/watch?feature=shared&v=Q5oloQnzzVM)

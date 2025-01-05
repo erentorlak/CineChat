@@ -43,7 +43,7 @@ def initialize_retriever():
         # Function to combine fields for document content
         def combine_fields(row):
             summary = str(row.get('summary', ''))
-            midpoint = len(summary) * 3 // 4
+            midpoint = len(summary) * 3 // 4    # embedding model context lenght problem
             half_summary = summary[:midpoint]
             content = f"Title: {row.get('title', '')}\nSummary: {half_summary}"
             return content
