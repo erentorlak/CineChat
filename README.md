@@ -107,3 +107,7 @@ movie-recommendation-chatbot/
 - **Port Conflicts**: Modify the `PORT` variable in the `.env` file to use a different port.
 
 ---
+
+## Demo Video
+
+[Watch the project demo on YouTube](https://www.youtube.com/watch?feature=shared&v=Q5oloQnzzVM)
